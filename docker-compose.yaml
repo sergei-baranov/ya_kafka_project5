@@ -1,0 +1,282 @@
+services:
+# sudo docker compose --env-file .env.793 up -d
+# sudo docker compose --env-file .env.793 up -d --build
+# sudo docker compose --env-file .env.793 down
+# sudo docker compose --env-file .env.793 down -v
+
+# 3000 yakafka-p5-grafana 3000:3000
+# 5432 yakafka-p5-postgres 5432:5432
+# 8060 yakafka-p5-debezium-ui 8060:8080
+# 8070 yakafka-p5-kafka-ui 8070:8080
+# 8071 yakafka-p5-schema-registry 8071:8081
+# 8073 yakafka-p5-kafka-connect 8073:8083 REST API Kafka Connect
+# 8078 yakafka-p5-ksqldb-server 8078:8088
+# 9090 yakafka-p5-prometheus 9090:9090
+# 9094 yakafka-p5-kafka-0 9094:9094
+# 9194 yakafka-p5-kafka-1 9194:9094
+# 9294 yakafka-p5-kafka-2 9294:9094
+# 9875 yakafka-p5-kafka-connect 9875:9875
+# 9876 yakafka-p5-kafka-connect 9876:9876
+
+  # первый брокер
+  kafka-0:
+    image: ${IMAGE}
+    container_name: yakafka-p5-kafka-0
+    ports:
+      - "9094:9094"
+    environment:
+      # /bin/kafka-storage random-uuid
+      # oIB0VjnrSoyKmPuw_ktZzA WAIBjEGuRfO0mrV9Hbcyog RQ7zZ3hNQfa4LrhqWJMlWA T8LIacj0Tj2Q2Mn_bONcSg
+      - CLUSTER_ID=WAIBjEGuRfO0mrV9Hbcyog
+      - KAFKA_NODE_ID=0
+      - KAFKA_PROCESS_ROLES=broker,controller
+      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=0@kafka-0:9093,1@kafka-1:9093,2@kafka-2:9093
+      - KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka-0:9092,EXTERNAL://127.0.0.1:9094
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KSQL_KSQL_STREAMS_REPLICATION_FACTOR=3
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=3
+      - CONTROL_CENTER_REPLICATION_FACTOR=3
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+    volumes:
+      - kafka_0_data:/var/lib/kafka/data
+    networks:
+      - proxynet
+
+  # второй брокер
+  kafka-1:
+    image: ${IMAGE}
+    container_name: yakafka-p5-kafka-1
+    ports:
+      - "9194:9094"
+    environment:
+      - CLUSTER_ID=WAIBjEGuRfO0mrV9Hbcyog
+      - KAFKA_NODE_ID=1
+      - KAFKA_PROCESS_ROLES=broker,controller
+      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=0@kafka-0:9093,1@kafka-1:9093,2@kafka-2:9093
+      - KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9194
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka-1:9092,EXTERNAL://127.0.0.1:9194
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KSQL_KSQL_STREAMS_REPLICATION_FACTOR=3
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=3
+      - CONTROL_CENTER_REPLICATION_FACTOR=3
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+    volumes:
+      - kafka_1_data:/var/lib/kafka/data
+    networks:
+      - proxynet
+
+  # третий брокер
+  kafka-2:
+    image: ${IMAGE}
+    container_name: yakafka-p5-kafka-2
+    ports:
+      - "9294:9094"
+    environment:
+      - CLUSTER_ID=WAIBjEGuRfO0mrV9Hbcyog
+      - KAFKA_NODE_ID=2
+      - KAFKA_PROCESS_ROLES=broker,controller
+      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=0@kafka-0:9093,1@kafka-1:9093,2@kafka-2:9093
+      - KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9294
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka-2:9092,EXTERNAL://127.0.0.1:9294
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KSQL_KSQL_STREAMS_REPLICATION_FACTOR=3
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=3
+      - CONTROL_CENTER_REPLICATION_FACTOR=3
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+    volumes:
+      - kafka_2_data:/var/lib/kafka/data
+    networks:
+      - proxynet
+
+  # Kafka ui
+  kafka-ui:
+    image: ${IMAGE_PROVECTUSLABS_KAFKA_UI}
+    container_name: yakafka-p5-kafka-ui
+    ports:
+      - "8070:8080"
+    environment:
+      - KAFKA_CLUSTERS_0_BOOTSTRAP_SERVERS=kafka-0:9092,kafka-1:9092,kafka-2:9092
+      - KAFKA_CLUSTERS_0_NAME=p5
+    networks:
+      - proxynet
+
+  # Schema Registry
+  schema-registry:
+    image: ${IMAGE_SCHEMA_REGISTRY}
+    container_name: yakafka-p5-schema-registry
+    depends_on:
+      - kafka-0
+      - kafka-1
+      - kafka-2
+    ports:
+      - "8071:8081"
+    environment:
+      - SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS=PLAINTEXT://kafka-0:9092,kafka-1:9092,kafka-2:9092
+      - SCHEMA_REGISTRY_HOST_NAME=schema-registry
+      - SCHEMA_REGISTRY_LISTENERS=http://0.0.0.0:8081
+    networks:
+      - proxynet
+
+  # База данных PostgreSQL (источник данных)
+  # docker exec -it postgres psql -h 127.0.0.1 -U postgres-user -d customers
+  postgres:
+    image: debezium/postgres:16
+    hostname: postgres
+    container_name: yakafka-p5-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres-user
+      POSTGRES_PASSWORD: postgres-pw
+      POSTGRES_DB: customers
+    volumes:
+      - ./postgres/custom-config.conf:/etc/postgresql/postgresql.conf
+      - postgres_data:/var/lib/postgresql/data
+      # To force re-initialization (docker-entrypoint-initdb.d),
+      # you must remove the existing volume data (postgres_data)
+      # or the container and restart the process.
+      - ./postgres/init-scripts:/docker-entrypoint-initdb.d
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    networks:
+      - proxynet
+
+  # Kafka Connect
+  kafka-connect:
+    build:
+      context: ./kafka-connect
+    container_name: yakafka-p5-kafka-connect
+    ports:
+      - "8073:8083"  # REST API Kafka Connect
+      - "9875:9875"
+      - "9876:9876"
+    depends_on:
+      - kafka-0
+      - kafka-1
+      - kafka-2
+      - schema-registry
+      - postgres
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: kafka-0:9092
+      CONNECT_REST_PORT: 8083
+      CONNECT_GROUP_ID: 'kafka-connect'
+
+      CONNECT_REST_ADVERTISED_HOST_NAME: 'localhost'
+
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+
+      # Хранение конфигурации, смещений и статусов
+      CONNECT_CONFIG_STORAGE_TOPIC: 'connect-config-storage'
+      CONNECT_OFFSET_STORAGE_TOPIC: 'connect-offset-storage'
+      CONNECT_STATUS_STORAGE_TOPIC: 'connect-status-storage'
+
+      # Конвертеры
+      CONNECT_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      CONNECT_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      CONNECT_INTERNAL_KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      CONNECT_INTERNAL_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL:  'http://schema-registry:8081/'
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: 'http://schema-registry:8081'
+
+      # Export JMX metrics to :9876/metrics for Prometheus
+      KAFKA_JMX_PORT: '9875'
+      KAFKA_OPTS: "-javaagent:/opt/jmx_prometheus_javaagent-0.15.0.jar=9876:/opt/kafka-connect.yml"
+      # Read connection password from file
+      CONNECT_CONFIG_PROVIDERS: "file"
+      CONNECT_CONFIG_PROVIDERS_FILE_CLASS: "org.apache.kafka.common.config.provider.FileConfigProvider"
+
+      # Пути к плагинам
+      CONNECT_PLUGIN_PATH: /usr/share/java/etc/kafka-connect/jars
+    volumes:
+      - ./confluent-hub-components/:/etc/kafka-connect/jars
+    networks:
+      - proxynet
+
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:v2.30.3
+    container_name: yakafka-p5-prometheus
+    ports:
+      - 9090:9090
+    volumes:
+      - ./prometheus:/etc/prometheus
+    command: --web.enable-lifecycle --config.file=/etc/prometheus/prometheus.yml
+    links:
+      - kafka-connect
+    networks:
+      - proxynet
+
+  # Grafana
+  grafana:
+    build:
+      context: ./grafana
+    container_name: yakafka-p5-grafana
+    ports:
+      - 3000:3000
+    networks:
+      - proxynet
+
+  # debezium ui
+  debezium-ui:
+    image: quay.io/debezium/debezium-ui
+    container_name: yakafka-p5-debezium-ui
+    ports:
+      - 8060:8080
+    networks:
+      - proxynet
+    environment:
+      KAFKA_CONNECT_URIS: http://kafka-connect:8083
+
+  ksqldb-server:
+    image: ${IMAGE_KSQLDB_SERVER}
+    hostname: ksqldb-server
+    container_name: yakafka-p5-ksqldb-server
+    depends_on:
+      - kafka-0
+      - kafka-1
+      - kafka-2
+      - schema-registry
+    ports:
+      - "8078:8088"
+    networks:
+      - proxynet
+    volumes:
+      - ksqldb_server_extensions:/opt/ksqldb-udfs
+    environment:
+      - KSQL_LISTENERS=http://0.0.0.0:8088
+      - KSQL_BOOTSTRAP_SERVERS=kafka-0:9092,kafka-1:9092,kafka-2:9092
+      - KSQL_KSQL_SCHEMA_REGISTRY_URL=http://schema-registry:8081
+      - KSQL_KSQL_LOGGING_PROCESSING_STREAM_AUTO_CREATE=true
+      - KSQL_KSQL_LOGGING_PROCESSING_TOPIC_AUTO_CREATE=true
+      # Configuration for UDFs
+      - KSQL_KSQL_EXTENSION_DIR=/opt/ksqldb-udfs
+
+  ksqldb-cli:
+    image: ${IMAGE_KSQLDB_CLI}
+    container_name: yakafka-p5-ksqldb-cli
+    depends_on:
+      - ksqldb-server
+    networks:
+      - proxynet
+    # docker exec -it ksqldb-cli ksql http://ksqldb-server:8088
+    stdin_open: true
+    tty: true
+
+networks:
+  proxynet:
+    name: custom_network  # Общая пользовательская сеть Docker
+
+volumes:
+  kafka_0_data:
+  kafka_1_data:
+  kafka_2_data:
+  postgres_data:
+  ksqldb_server_extensions:

@@ -1,0 +1,34 @@
+{
+  "name": "pg-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "database.hostname": "postgres",
+    "database.port": "5432",
+    "database.user": "postgres-user",
+    "database.password": "postgres-pw",
+
+    "database.dbname": "customers",
+    "table.include.list": "public.users,public.orders",
+    "column.mask.with.3.chars": "public.users.email,public.users.name",
+
+    "heartbeat.interval.ms": "30000",
+
+    "Xsnapshot.mode": "initial",
+
+    "signal.enabled.channels": "source",
+    "signal.kafka.bootstrap.servers": "localhost:9092",
+    "Xsignal.kafka.topic": "customers_signaling_topic",
+    "signal.kafka.poll.timeout.ms": "100",
+
+    "transforms": "unwrap",
+    "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+    "transforms.unwrap.drop.tombstones": "false",
+    "transforms.unwrap.delete.handling.mode": "rewrite",
+
+    "topic.prefix": "customers",
+    "topic.creation.enable": "true",
+    "topic.creation.default.replication.factor": "-1",
+    "topic.creation.default.partitions": "-1",
+    "skipped.operations": "none"
+  }
+}
