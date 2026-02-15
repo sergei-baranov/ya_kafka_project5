@@ -270,6 +270,31 @@ services:
     stdin_open: true
     tty: true
 
+  python-app:
+    build:
+      context: .
+      dockerfile: DockerfilePython
+    container_name: yakafka-p5-python-app
+    depends_on:
+      - kafka-0
+      - kafka-1
+      - kafka-2
+      - kafka-ui
+      - schema-registry
+      - postgres
+      - kafka-connect
+      - prometheus
+      - grafana
+      - debezium-ui
+      - ksqldb-server
+      - ksqldb-cli
+    networks:
+      - proxynet
+    volumes:
+      - python_app:/app
+    stdin_open: true
+    tty: true
+
 networks:
   proxynet:
     name: custom_network  # Общая пользовательская сеть Docker
@@ -280,3 +305,4 @@ volumes:
   kafka_2_data:
   postgres_data:
   ksqldb_server_extensions:
+  python_app:

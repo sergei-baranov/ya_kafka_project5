@@ -1,0 +1,17 @@
+[flake8]
+#ignore = E265, F811, PT001, DJ05, D100, D105, D104, W503, W504, W292
+max-line-length = 79
+disable-noqa = True
+paths =
+  ./app
+max-complexity = 10
+exclude =
+  env
+  .env
+  venv
+  .venv
+  tests
+  migrations
+  app/examples
+#per-file-ignores =
+#  __init__.py: F401, E402

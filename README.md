@@ -17,7 +17,8 @@
     - [3.2. Проверим топики в Kafka UI](#cdc_topic)
 - [4. Проверяем Мониторинг](#monitoring)
 - [5. Приложение на python](#python_app)
-- [6. Инкрементальные снапшоты по сигналам](#signal)
+    - [5.1. Поработаем руками с ksqldb](#python_app_ksql)
+- [6. Ресерч: Инкрементальные снапшоты по сигналам](#signal)
     - [6.1. Перезапускаем проект](#signal_restart)
     - [6.2. Убедимся, что создалась таблица customers.public.debezium_signal](#signal_rdbms_ddl)
     - [6.3. Создаём коннектор со снапшотом no_data и конфигурацией сигналов](#signal_connector)
@@ -39,9 +40,9 @@
 - Пути и версии образов для проекта описаны переменными окружения в файле `.env.793`. Версия Кафки получится `3.9`.
 - Режим кластера - `Kraft`.
 - Многие порты "наружу" переопределены для многих сервисов относительно портов по умолчанию, во избежание конфликтов (ниже будет список url-ов для проверок по http).
-- Структура БД и инициализационное наполнение данных создаётся при разворачивании проекта, как и "логическая" репликация посгреса (см. `./postgres/custom-config.conf`, `./postgres/init-scripts/create_tablrs.sql` и соотв. инструкции в `./docker-compose.yaml`).
+- Структура БД и инициализационное наполнение данных создаётся при разворачивании проекта, как и "логическая" репликация посгреса (см. `./postgres/custom-config.conf`, `./postgres/init-scripts/create_tables.sql` и соотв. инструкции в `./docker-compose.yaml`).
 - Коннекторы будем создавать и удалять руками, конфиги находятся в файлах `./connector.json`, `./connector4signals.json` (второй - для тестирования инкрементных снапшотов по сигналам).
-- "Давать нагрузку" на postgres для тестирования cdc и графаны будем сначала руками, потом в python-приложении.
+- "Давать нагрузку" на postgres для тестирования cdc и графаны будем руками.
 
 **NB**: для разворачивания контейнера с Grafana на хостовой машине должен быть доступен глобальный интернет из незаблоченной им юрисдикции. **TODO**: убрать инструкцию по установке пайчарта в Графану и посмотреть, будет ди работоспособен проект в части соответствия ТЗ.
 
@@ -314,7 +315,7 @@ INSERT 0 100000
 
 ## 4. <a name="monitoring">Проверяем Мониторинг</a>
 
-**NB**: тут надо выждать какое-то количество минут, чтобы Grafana агрегировались наши метрики (видимо).
+**NB**: тут надо выждать какое-то количество минут, чтобы агрегировались наши метрики (видимо).
 
 Идём в `Grafana`:
 
@@ -348,10 +349,288 @@ INSERT 0 100000
 
 ## <a name = "python_app">5. Приложение на python</a>
 
-TODO
+В этот раз потренируемся изготовить простое python-приложение, работающее через `ksqldb`.
+
+Сначала осуществим все действия руками через консоль, а потом запустим приложение,
+реализующее ровно тот же алгоритм.
+
+**Какая тут у нас тонкость**: надо выгребать из сообщения не только `Value`, но и `Key`,
+так как при удалении записи `Value` в cdc message равно `null`,
+а `id` удалённой сущности надо искать в `payload` в `Key`.
+
+Как получить `Key` при определении `stream`-а? См. ниже: определяем поле с ключевым словом `KEY`.
+
+### <a name="python_app_ksql">5.1. Поработаем руками с ksqldb</a>
+
+**5.1.1. Заходим в необходимое приложение необходимого контейнера**:
+
+```bash
+tesla@tesla:/.../ya_kafka_project5$ sudo docker exec -it yakafka-p5-ksqldb-cli ksql http://ksqldb-server:8088
+...
+```
+
+**5.1.2. Убедимся, что необходимые топики существуют** (`customers.public.orders`, `customers.public.users`):
+
+```bash
+ksql> SHOW TOPICS;
+
+ Kafka Topic                    | Partitions | Partition Replicas 
+------------------------------------------------------------------
+ __debezium-heartbeat.customers | 1          | 1                  
+ connect-config-storage         | 1          | 1                  
+ connect-offset-storage         | 25         | 1                  
+ connect-status-storage         | 5          | 1                  
+ customers.public.orders        | 1          | 1                  
+ customers.public.users         | 1          | 1                  
+ default_ksql_processing_log    | 1          | 1                  
+------------------------------------------------------------------
+```
+
+**5.1.3. Дропаем стримы, чтобы далее создать их с чистого листа**:
+
+```bash
+ksql> DROP STREAM IF EXISTS cdc_raw_orders;
+
+ Message                                       
+-----------------------------------------------
+ Source `CDC_RAW_ORDERS` does not exist. 
+-----------------------------------------------
+
+ksql> DROP STREAM IF EXISTS cdc_raw_users;
+
+ Message                                
+----------------------------------------
+ Source `CDC_RAW_USERS` does not exist. 
+----------------------------------------
+
+```
+
+**5.1.4. Создадим stream-ы, в которые вытянем payload сообщений как json**
+
+Запросы ksql:
+
+```sql
+CREATE STREAM IF NOT EXISTS cdc_raw_users (
+  key STRUCT<
+    schema VARCHAR,
+    payload STRUCT<
+      id INT
+    >
+  > KEY,
+  schema VARCHAR,
+  payload STRUCT<
+    id INT,
+    name VARCHAR,
+    email VARCHAR,
+    created_at BIGINT
+  >
+) WITH (
+  KAFKA_TOPIC = 'customers.public.users',
+  VALUE_FORMAT = 'JSON',
+  KEY_FORMAT = 'JSON'
+);
+
+CREATE STREAM IF NOT EXISTS cdc_raw_orders (
+  key STRUCT<
+    schema VARCHAR,
+    payload STRUCT<
+      id INT
+    >
+  > KEY,
+  schema VARCHAR,
+  payload STRUCT<
+    id INT,
+    user_id INT,
+    product_name VARCHAR,
+    quantity INT,
+    order_date BIGINT
+  >
+) WITH (
+  KAFKA_TOPIC = 'customers.public.orders',
+  VALUE_FORMAT = 'JSON',
+  KEY_FORMAT = 'JSON'
+);
+```
+
+Консоль:
+
+```bash
+ksql> CREATE STREAM IF NOT EXISTS cdc_raw_users (
+>  key STRUCT<
+>    schema VARCHAR,
+>    payload STRUCT<
+>      id INT
+>    >
+>  > KEY,
+>  schema VARCHAR,
+>  payload STRUCT<
+>    id INT,
+>    name VARCHAR,
+>    email VARCHAR,
+>    created_at BIGINT
+>  >
+>) WITH (
+>  KAFKA_TOPIC = 'customers.public.users',
+>  VALUE_FORMAT = 'JSON',
+>  KEY_FORMAT = 'JSON'
+>);
+
+ Message        
+----------------
+ Stream created 
+----------------
+
+ksql> CREATE STREAM IF NOT EXISTS cdc_raw_orders (
+>  key STRUCT<
+>    schema VARCHAR,
+>    payload STRUCT<
+>      id INT
+>    >
+>  > KEY,
+>  schema VARCHAR,
+>  payload STRUCT<
+>    id INT,
+>    user_id INT,
+>    product_name VARCHAR,
+>    quantity INT,
+>    order_date BIGINT
+>  >
+>) WITH (
+>  KAFKA_TOPIC = 'customers.public.orders',
+>  VALUE_FORMAT = 'JSON',
+>  KEY_FORMAT = 'JSON'
+>);
+
+ Message        
+----------------
+ Stream created 
+----------------
+```
+
+**5.1.5. Streams list:**
+
+```bash
+ksql> SHOW STREAMS;
+
+ Stream Name    | Kafka Topic             | Key Format | Value Format | Windowed 
+---------------------------------------------------------------------------------
+ CDC_RAW_ORDERS | customers.public.orders | JSON       | JSON         | false    
+ CDC_RAW_USERS  | customers.public.users  | JSON       | JSON         | false    
+---------------------------------------------------------------------------------
+
+```
+
+**5.1.6. Прочитаем по 1-му сообщению с каждого стрима для проверки**:
+
+```bash
+ksql> SELECT KEY, PAYLOAD FROM CDC_RAW_USERS LIMIT 1;
++----------------------------------------------------------------+----------------------------------------------------------------+
+|KEY                                                             |PAYLOAD                                                         |
++----------------------------------------------------------------+----------------------------------------------------------------+
+|{SCHEMA={"type":"struct","fields":[{"type":"int32","optional":fa|{ID=1, NAME=***, EMAIL=***, CREATED_AT=1771174557122423}        |
+|lse,"default":0,"field":"id"}],"optional":false,"name":"customer|                                                                |
+|s.public.users.Key"}, PAYLOAD={ID=1}}                           |                                                                |
+Limit Reached
+Query terminated
 
 
-## <a name = "signal">6. Инкрементальные снапшоты по сигналам</a>
+ksql> SELECT KEY, PAYLOAD FROM CDC_RAW_ORDERS LIMIT 1;
++----------------------------------------------------------------+----------------------------------------------------------------+
+|KEY                                                             |PAYLOAD                                                         |
++----------------------------------------------------------------+----------------------------------------------------------------+
+|{SCHEMA={"type":"struct","fields":[{"type":"int32","optional":fa|{ID=1, USER_ID=1, PRODUCT_NAME=Product A, QUANTITY=2, ORDER_DATE|
+|lse,"default":0,"field":"id"}],"optional":false,"name":"customer|=1771174557124084}                                              |
+|s.public.orders.Key"}, PAYLOAD={ID=1}}                          |                                                                |
+Limit Reached
+Query terminated
+
+```
+
+**5.1.7. Теперь можно делать запросы**, в которых `key` и `payload` разложим по полям:
+
+**NB**: в `postgresql` мы не прописали `CURRENT_TIMESTAMP(3)`,
+а просто `CURRENT_TIMESTAMP`, что даёт `CURRENT_TIMESTAMP(6)`.
+
+В `ksqldb` же `TIMESTAMP` - это `milliceconds`, не `microseconds`.
+Поэтому мы `created_at` и `order_date` определили как `BIGINT`,
+а к `TIMESTAMP` приведём при выборке, поделив предварительно на 1000
+(в ksqldb `/` классически даёт целочисленное деление, если оба числа целые).
+
+```bash
+ksql> SELECT
+>  key->payload->id as key_id,
+>  payload->id,
+>  FROM_UNIXTIME(payload->created_at/1000) AS created_at
+>FROM
+>  CDC_RAW_USERS
+>LIMIT 2
+>;
++--------+------+-------------------------+
+|KEY_ID  |ID    |CREATED_AT               |
++--------+------+-------------------------+
+|1       |1     |2026-02-15T16:55:57.122  |
+|2       |2     |2026-02-15T16:55:57.122  |
+Limit Reached
+Query terminated
+
+ksql> SELECT
+>  key->payload->id as key_id,
+>  payload->id,
+>  FROM_UNIXTIME(payload->order_date/1000) AS order_date
+>FROM
+>  CDC_RAW_ORDERS
+>LIMIT 2
+>;
++--------+------+-------------------------+
+|KEY_ID  |ID    |ORDER_DATE               |
++--------+------+-------------------------+
+|1       |1     |2026-02-15T16:55:57.124  |
+|2       |2     |2026-02-15T16:55:57.124  |
+Limit Reached
+Query terminated
+```
+
+**5.1.8. Я добавил одну запись в users, потом проапдейтил её, потом удалил**
+
+```bash
+customers=# insert into users (name, email) values ('Boo Moo', 'boo@moo.com');
+INSERT 0 1
+
+customers=# update users set email = 'moo@boo.com' where id = 5;
+UPDATE 1
+
+customers=# delete from users where id = 5;
+DELETE 1
+```
+
+*CDC на удаление запишет в Value null, но ид удалённой записи будет в Key (вывожу только три последние записи):*
+
+```bash
+ksql> SELECT
+>  key->payload->id as key_id,
+>  payload->id,
+>  FROM_UNIXTIME(payload->created_at/1000) AS created_at
+>FROM
+>  CDC_RAW_USERS
+>LIMIT 20
+>;
++----------+------+-------------------------+
+|KEY_ID    |ID    |CREATED_AT               |
++----------+------+-------------------------+
+|5         |5     |2026-02-15T20:32:19.401  |
+|5         |5     |2026-02-15T20:32:19.401  |
+|5         |null  |null                     |
+Query Completed
+Query terminated
+
+```
+
+**5.1.9. Итого**
+
+Итого - CDC-сообщения можно потреблять :).
+
+
+## <a name = "signal">6. Ресерч: Инкрементальные снапшоты по сигналам</a>
 
 Для тестирования данного функционала необходимо
 
@@ -359,11 +638,28 @@ TODO
 - создать другой коннектор
 - подать сигнал (сообщение в сигнальный топик) на инкрементальный снапшот
 
+**NB**: таблица в рсубд для `source channel` создаётся автоматически при развёртывании проекта (см. `./postgres/init-scripts/create_tables.sql` и соотв. инструкции в `./docker-compose.yaml`).
+
+*Автосоздание таблиц работает только если volume с данными постгреса (см. `postgres_data:/var/lib/postgresql/data` в `./docker-compose.yaml`) пуст, то есть при первом запуске проекта или запуске после `down -v`, поэтому если надо пересоздавать структуру руками - см. `./postgres/init-scripts/create_tables.sql`.*
+
+**NB**: зачем мы вообще создали `source channel` наряду с `kafka channel` (см. ниже в конфиге коннектора настойку `"signal.enabled.channels": "source,kafka"`)?
+Так повелел Debezium (и ниже мы убедимся, что он действительно что-то пишет в postgres, когда делает снапшот по согналу в kafka channel):
+
 ```
 https://debezium.io/documentation/reference/stable/configuration/signalling.html
 
 Note:
-To use Kafka signaling to trigger ad hoc incremental snapshots for most connectors, you must first enable a source signaling channel in the connector configuration. The source channel implements a watermarking mechanism to deduplicate events that might be captured by an incremental snapshot and then captured again after streaming resumes. Enabling the source channel is not required when using a signaling channel to trigger an incremental snapshot of a read-only MySQL database that has GTIDs enabled. For more information, see MySQL read only incremental snapshot.
+
+To use Kafka signaling to trigger ad hoc incremental snapshots for most connectors,
+you must first enable a source signaling channel in the connector configuration.
+
+The source channel implements a watermarking mechanism to deduplicate events
+that might be captured by an incremental snapshot and then captured again
+after streaming resumes.
+
+Enabling the source channel is not required when using a signaling channel
+to trigger an incremental snapshot of a read-only MySQL database that has GTIDs enabled.
+For more information, see MySQL read only incremental snapshot.
 ```
 
 **NB: you must first enable a source signaling channel in the connector configuration**
