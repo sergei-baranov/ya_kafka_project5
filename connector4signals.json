@@ -13,7 +13,13 @@
 
     "heartbeat.interval.ms": "30000",
 
-    "snapshot.mode": "initial",
+    "snapshot.mode": "no_data",
+
+    "signal.enabled.channels": "source,kafka",
+    "signal.data.collection": "public.debezium_signal",
+    "signal.kafka.bootstrap.servers": "kafka-0:9092,kafka-1:9092,kafka-2:9092",
+    "signal.kafka.topic": "customers_signaling_topic",
+    "signal.kafka.poll.timeout.ms": "100",
 
     "transforms": "unwrap",
     "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",

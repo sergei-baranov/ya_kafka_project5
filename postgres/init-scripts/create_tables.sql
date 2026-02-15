@@ -1,23 +1,30 @@
 CREATE TABLE IF NOT EXISTS users (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(100),
-    email VARCHAR(100),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(100),
+  email VARCHAR(100),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS orders (
-    id SERIAL PRIMARY KEY,
-    user_id INT,
-    product_name VARCHAR(100),
-    quantity INT,
-    order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  id SERIAL PRIMARY KEY,
+  user_id INT,
+  product_name VARCHAR(100),
+  quantity INT,
+  order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
-    -- далее использовать TRUNCATE ... CASCADE
-    CONSTRAINT orders_user_id_fk_users_id
-        FOREIGN KEY (user_id)
-        REFERENCES users (id)
-        ON DELETE CASCADE
-        ON UPDATE CASCADE
+  -- далее использовать TRUNCATE ... CASCADE
+  CONSTRAINT orders_user_id_fk_users_id
+    FOREIGN KEY (user_id)
+    REFERENCES users (id)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
+);
+
+-- "signal.data.collection": "public.debezium_signal"
+CREATE TABLE IF NOT EXISTS debezium_signal (
+  id VARCHAR(42) PRIMARY KEY,
+  type VARCHAR(32) NOT NULL,
+  data VARCHAR(2048) NULL
 );
 
 -- initial fill users
