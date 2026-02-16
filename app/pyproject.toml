@@ -1,0 +1,8 @@
+[project]
+name = "checkapp"
+version = "2026.1.0"
+description = "App to check debezium cdc topics with ksqldb"
+requires-python = ">=3.12"
+dependencies = [
+    "ksqldb>=1.0.1",
+]

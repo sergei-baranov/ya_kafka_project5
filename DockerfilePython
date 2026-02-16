@@ -1,13 +1,26 @@
-FROM python:3.12
-
-# trixie
-# RUN apt-get update && apt-get install -y supervisor
-# alpine
-# RUN apk update && apk add --no-cache supervisor
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS uv
 
 WORKDIR /app
+
+COPY ./app/uv.lock ./app/pyproject.toml /app/
+
+RUN uv sync --frozen --no-install-project
+
 COPY ./app/ /app/
-RUN pip install -r requirements.txt
+
+# Финальный образ (можно использовать slim для экономии места)
+# uv не попадает в финальный образ, так как используется многоэтапная сборка. 
+FROM python:3.12-slim-bookworm
+WORKDIR /app
+
+# Копируем виртуальное окружение из этапа сборки
+COPY --from=uv /app/.venv /app/.venv
+
+# Копируем код приложения
+COPY ./app/ /app/
+
+# Добавляем venv в PATH, чтобы не использовать "uv run" или активацию
+ENV PATH="/app/.venv/bin:$PATH"
 
 # see docker-compose stdin_open: true, tty: true
 CMD ["bash"]

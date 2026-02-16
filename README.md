@@ -18,6 +18,7 @@
 - [4. Проверяем Мониторинг](#monitoring)
 - [5. Приложение на python](#python_app)
     - [5.1. Поработаем руками с ksqldb](#python_app_ksql)
+    - [5.2. То же через приложение на python](#python_app_perform)
 - [6. Ресерч: Инкрементальные снапшоты по сигналам](#signal)
     - [6.1. Перезапускаем проект](#signal_restart)
     - [6.2. Убедимся, что создалась таблица customers.public.debezium_signal](#signal_rdbms_ddl)
@@ -53,27 +54,30 @@ tesla@tesla:~$ cd /.../ya_kafka_project5
 ...
 tesla@tesla:/.../ya_kafka_project5$ sudo docker compose --env-file .env.793 up -d --build
 ...
-[+] up 20/20
- ✔ Image ya_kafka_project5-grafana                   Built    1.0s
- ✔ Image ya_kafka_project5-kafka-connect             Built    1.0s
- ✔ Network custom_network                            Created  0.0s
- ✔ Volume ya_kafka_project5_kafka_0_data             Created  0.0s
- ✔ Volume ya_kafka_project5_kafka_1_data             Created  0.0s
- ✔ Volume ya_kafka_project5_kafka_2_data             Created  0.0s
- ✔ Volume ya_kafka_project5_ksqldb_server_extensions Created  0.0s
- ✔ Volume ya_kafka_project5_postgres_data            Created  0.0s
- ✔ Container yakafka-p5-grafana                      Created  0.1s
- ✔ Container yakafka-p5-kafka-1                      Created  0.1s
- ✔ Container yakafka-p5-postgres                     Created  0.1s
- ✔ Container yakafka-p5-debezium-ui                  Created  0.1s
- ✔ Container yakafka-p5-kafka-2                      Created  0.1s
- ✔ Container yakafka-p5-kafka-ui                     Created  0.1s
- ✔ Container yakafka-p5-kafka-0                      Created  0.1s
- ✔ Container yakafka-p5-schema-registry              Created  0.0s
- ✔ Container yakafka-p5-ksqldb-server                Created  0.1s
- ✔ Container yakafka-p5-kafka-connect                Created  0.0s
- ✔ Container yakafka-p5-prometheus                   Created  0.0s
- ✔ Container yakafka-p5-ksqldb-cli                   Created  0.0s
+[+] up 23/23
+ ✔ Image ya_kafka_project5-python-app                Built      1.1s
+ ✔ Image ya_kafka_project5-grafana                   Built      1.1s
+ ✔ Image ya_kafka_project5-kafka-connect             Built      1.1s
+ ✔ Network custom_network                            Created    0.0s
+ ✔ Volume ya_kafka_project5_kafka_1_data             Created    0.0s
+ ✔ Volume ya_kafka_project5_ksqldb_server_extensions Created    0.0s
+ ✔ Volume ya_kafka_project5_python_app               Created    0.0s
+ ✔ Volume ya_kafka_project5_postgres_data            Created    0.0s
+ ✔ Volume ya_kafka_project5_kafka_2_data             Created    0.0s
+ ✔ Volume ya_kafka_project5_kafka_0_data             Created    0.0s
+ ✔ Container yakafka-p5-debezium-ui                  Created    0.1s
+ ✔ Container yakafka-p5-kafka-2                      Created    0.1s
+ ✔ Container yakafka-p5-kafka-ui                     Created    0.1s
+ ✔ Container yakafka-p5-kafka-1                      Created    0.1s
+ ✔ Container yakafka-p5-grafana                      Created    0.1s
+ ✔ Container yakafka-p5-postgres                     Created    0.1s
+ ✔ Container yakafka-p5-kafka-0                      Created    0.1s
+ ✔ Container yakafka-p5-schema-registry              Created    0.0s
+ ✔ Container yakafka-p5-ksqldb-server                Created    0.0s
+ ✔ Container yakafka-p5-kafka-connect                Created    0.0s
+ ✔ Container yakafka-p5-ksqldb-cli                   Created    0.0s
+ ✔ Container yakafka-p5-prometheus                   Created    0.0s
+ ✔ Container yakafka-p5-python-app                   Created    0.1s
 ```
 
 ### <a name="deploy_test_ps">1.2. Проверяем, что контейнеры не упали после запуска</a>
@@ -82,19 +86,20 @@ tesla@tesla:/.../ya_kafka_project5$ sudo docker compose --env-file .env.793 up -
 # {{.ID}}, {{.Image}}, {{.Command}}, {{.CreatedAt}}, {{.RunningFor}}, {{.Ports}}, {{.Status}}, {{.Size}}, {{.Names}}, {{.Labels}}, {{.Mounts}}, {{.Networks}}
 
 tesla@tesla:/.../ya_kafka_project5$ sudo docker ps -a --format "table {{.Names}}\t{{.Status}}\t{{.Networks}}"
-NAMES                        STATUS                   NETWORKS
-yakafka-p5-ksqldb-cli        Up 6 minutes             custom_network
-yakafka-p5-prometheus        Up 6 minutes             custom_network
-yakafka-p5-kafka-connect     Up 6 minutes (healthy)   custom_network
-yakafka-p5-ksqldb-server     Up 6 minutes             custom_network
-yakafka-p5-schema-registry   Up 6 minutes             custom_network
-yakafka-p5-kafka-1           Up 6 minutes             custom_network
-yakafka-p5-kafka-0           Up 6 minutes             custom_network
-yakafka-p5-kafka-2           Up 6 minutes             custom_network
-yakafka-p5-postgres          Up 6 minutes             custom_network
-yakafka-p5-debezium-ui       Up 6 minutes             custom_network
-yakafka-p5-kafka-ui          Up 6 minutes             custom_network
-yakafka-p5-grafana           Up 6 minutes             custom_network
+NAMES                        STATUS                        NETWORKS
+yakafka-p5-python-app        Up About a minute             custom_network
+yakafka-p5-prometheus        Up About a minute             custom_network
+yakafka-p5-ksqldb-cli        Up About a minute             custom_network
+yakafka-p5-kafka-connect     Up About a minute (healthy)   custom_network
+yakafka-p5-ksqldb-server     Up About a minute             custom_network
+yakafka-p5-schema-registry   Up About a minute             custom_network
+yakafka-p5-kafka-2           Up About a minute             custom_network
+yakafka-p5-kafka-0           Up About a minute             custom_network
+yakafka-p5-kafka-1           Up About a minute             custom_network
+yakafka-p5-postgres          Up About a minute             custom_network
+yakafka-p5-grafana           Up About a minute             custom_network
+yakafka-p5-debezium-ui       Up About a minute             custom_network
+yakafka-p5-kafka-ui          Up About a minute             custom_network
 ```
 
 TODO: префикс `yakafka-p5` вынести в `--project-name` (`name: yakafka-p5` над `services:`.).
@@ -556,6 +561,30 @@ Query terminated
 а к `TIMESTAMP` приведём при выборке, поделив предварительно на 1000
 (в ksqldb `/` классически даёт целочисленное деление, если оба числа целые).
 
+Сиквел:
+
+```sql
+SELECT
+  key->payload->id as key_id,
+  payload->id,
+  FROM_UNIXTIME(payload->created_at/1000) AS created_at
+FROM
+  CDC_RAW_USERS
+LIMIT 2
+;
+
+SELECT
+  key->payload->id as key_id,
+  payload->id,
+  FROM_UNIXTIME(payload->order_date/1000) AS order_date
+FROM
+  CDC_RAW_ORDERS
+LIMIT 2
+;
+```
+
+Консоль:
+
 ```bash
 ksql> SELECT
 >  key->payload->id as key_id,
@@ -625,9 +654,89 @@ Query terminated
 
 ```
 
-**5.1.9. Итого**
+**5.1.9. Полезное.**
+
+- `auto.offset.reset`: `https://docs.confluent.io/platform/current/ksqldb/operations.html#no-results-from-select-from-table-or-stream`
+
+
+**5.1.10. Итого**
 
 Итого - CDC-сообщения можно потреблять :).
+
+
+### <a name="python_app_perform">5.2. То же через приложение на python</a>
+
+Используем либу [ksqldb](https://pypi.org/project/ksqldb/).
+
+Заходим в контейнер с приложением, запускаем его, дожидаемся ответа.
+
+Приложение делает ровно то же самое, что мы сделали руками в предыдущей секции.
+
+```bash
+tesla@tesla:/.../ya_kafka_project5$ sudo docker exec -it yakafka-p5-python-app bash
+root@862510c2b1bb:/app# python main.py
+/app/main.py:110: DeprecationWarning: There is no current event loop
+  current_loop = asyncio.get_event_loop()
+
+
+query_sync: SELECT KEY, PAYLOAD FROM CDC_RAW_USERS LIMIT 1;:
+
+{'queryId': 'transient_CDC_RAW_USERS_7032778586385550743', 'columnNames': ['KEY', 'PAYLOAD'], 'columnTypes': ['STRUCT<`SCHEMA` STRING, `PAYLOAD` STRUCT<`ID` INTEGER>>', 'STRUCT<`ID` INTEGER, `NAME` STRING, `EMAIL` STRING, `CREATED_AT` BIGINT>']}
+[{'SCHEMA': '{"type":"struct","fields":[{"type":"int32","optional":false,"default":0,"field":"id"}],"optional":false,"name":"customers.public.users.Key"}', 'PAYLOAD': {'ID': 1}}, {'ID': 1, 'NAME': '***', 'EMAIL': '***', 'CREATED_AT': 1771263182041697}]
+
+
+query_sync: SELECT KEY, PAYLOAD FROM CDC_RAW_ORDERS LIMIT 1;:
+
+{'queryId': 'transient_CDC_RAW_ORDERS_3303077207265521550', 'columnNames': ['KEY', 'PAYLOAD'], 'columnTypes': ['STRUCT<`SCHEMA` STRING, `PAYLOAD` STRUCT<`ID` INTEGER>>', 'STRUCT<`ID` INTEGER, `USER_ID` INTEGER, `PRODUCT_NAME` STRING, `QUANTITY` INTEGER, `ORDER_DATE` BIGINT>']}
+[{'SCHEMA': '{"type":"struct","fields":[{"type":"int32","optional":false,"default":0,"field":"id"}],"optional":false,"name":"customers.public.orders.Key"}', 'PAYLOAD': {'ID': 1}}, {'ID': 1, 'USER_ID': 1, 'PRODUCT_NAME': 'Product A', 'QUANTITY': 2, 'ORDER_DATE': 1771263182043820}]
+
+
+query_sync: 
+SELECT
+  key->payload->id as key_id,
+  payload->id,
+  FROM_UNIXTIME(payload->created_at/1000) AS created_at
+FROM
+  CDC_RAW_USERS
+LIMIT 2
+;
+:
+
+{'queryId': 'transient_CDC_RAW_USERS_1230677105044441225', 'columnNames': ['KEY_ID', 'ID', 'CREATED_AT'], 'columnTypes': ['INTEGER', 'INTEGER', 'TIMESTAMP']}
+[1, 1, '2026-02-16T17:33:02.041']
+[2, 2, '2026-02-16T17:33:02.041']
+
+
+query_async: 
+SELECT
+  key->payload->id as key_id,
+  payload->id,
+  FROM_UNIXTIME(payload->order_date/1000) AS order_date
+FROM
+  CDC_RAW_ORDERS
+LIMIT 2
+;
+:
+
+{'queryId': 'transient_CDC_RAW_ORDERS_5503829347775820840', 'columnNames': ['KEY_ID', 'ID', 'ORDER_DATE'], 'columnTypes': ['INTEGER', 'INTEGER', 'TIMESTAMP']}
+[1, 1, '2026-02-16T17:33:02.043']
+[2, 2, '2026-02-16T17:33:02.043']
+
+```
+
+**NB**: Если девелопить понадобилось, и мы правим `DockerfilePyton` в директории проекта или файлы в `app`, - вызываем после правок:
+
+```
+sudo docker compose --env-file .env.793 down python-app -v
+
+sudo docker compose --env-file .env.793 up -d --no-deps --build --force-recreate python-app
+
+# проверка общей работоспособности
+
+sudo docker compose --env-file .env.793 ps -a
+
+sudo docker logs -n 100 yakafka-p5-python-app
+```
 
 
 ## <a name = "signal">6. Ресерч: Инкрементальные снапшоты по сигналам</a>
